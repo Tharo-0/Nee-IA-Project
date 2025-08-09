@@ -1,12 +1,53 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>New-IA</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New IA Chat</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #111; color: #fff; }
+    #chat { max-width: 600px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
+    input, button { padding: 10px; border-radius: 5px; border: none; }
+    input { width: 70%; }
+    button { background: #0f0; cursor: pointer; }
+    .msg { margin: 10px 0; }
+    .user { color: #0f0; }
+    .bot { color: #0ff; }
+  </style>
 </head>
 <body>
-  <h1>Servidor New-IA funcionando 🚀</h1>
-  <p>Si ves esta página, el despliegue en Render fue exitoso.</p>
+  <div id="chat">
+    <h2>💬 Chat con New-IA</h2>
+    <div id="messages"></div>
+    <input type="text" id="input" placeholder="Escribe tu mensaje...">
+    <button onclick="sendMessage()">Enviar</button>
+  </div>
+
+  <script>
+    async function sendMessage() {
+      const input = document.getElementById("input");
+      const msgContainer = document.getElementById("messages");
+
+      const userMsg = document.createElement("div");
+      userMsg.className = "msg user";
+      userMsg.textContent = "Tú: " + input.value;
+      msgContainer.appendChild(userMsg);
+
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: input.value })
+      });
+
+      const data = await res.json();
+
+      const botMsg = document.createElement("div");
+      botMsg.className = "msg bot";
+      botMsg.textContent = "IA: " + data.reply;
+      msgContainer.appendChild(botMsg);
+
+      input.value = "";
+    }
+  </script>
 </body>
 </html>
