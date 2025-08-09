@@ -1,53 +1,78 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New IA Chat</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat con New-IA</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #111; color: #fff; }
-    #chat { max-width: 600px; margin: auto; background: #222; padding: 20px; border-radius: 10px; }
-    input, button { padding: 10px; border-radius: 5px; border: none; }
-    input { width: 70%; }
-    button { background: #0f0; cursor: pointer; }
-    .msg { margin: 10px 0; }
-    .user { color: #0f0; }
-    .bot { color: #0ff; }
+    :root { --bg:#0b0b0f; --panel:#151520; --text:#eaeaf0; --muted:#9aa0a6; --accent:#00ff66; --bubble:#1c1c2b; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,Segoe UI,Roboto}
+    .wrap{max-width:820px;margin:24px auto;padding:0 16px}
+    .card{background:var(--panel);border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+    h1{margin:0 0 12px;font-size:22px}
+    #log{height:60vh;overflow:auto;background:#0f0f16;border-radius:12px;padding:10px}
+    .msg{margin:10px 0;max-width:85%;padding:10px 12px;border-radius:12px;background:var(--bubble)}
+    .you{margin-left:auto;background:#26263a;border:1px solid #32324a}
+    form{display:flex;gap:10px;margin-top:12px}
+    input{flex:1;padding:12px;border-radius:10px;border:1px solid #2a2a38;background:#101018;color:var(--text)}
+    button{padding:12px 16px;border-radius:10px;border:0;background:var(--accent);color:#000;font-weight:700;cursor:pointer}
+    .hint{color:var(--muted);font-size:12px;margin-top:6px}
+    .error{color:#ff8080}
   </style>
 </head>
 <body>
-  <div id="chat">
-    <h2>💬 Chat con New-IA</h2>
-    <div id="messages"></div>
-    <input type="text" id="input" placeholder="Escribe tu mensaje...">
-    <button onclick="sendMessage()">Enviar</button>
+  <div class="wrap">
+    <div class="card">
+      <h1>💬 Chat con New-IA</h1>
+      <div id="log"></div>
+      <form id="chatForm">
+        <input id="msg" placeholder="Escribe tu mensaje…" autocomplete="off" />
+        <button id="send">Enviar</button>
+      </form>
+      <div class="hint">Nota: si la instancia está dormida, la primera respuesta puede tardar unos segundos.</div>
+    </div>
   </div>
 
   <script>
-    async function sendMessage() {
-      const input = document.getElementById("input");
-      const msgContainer = document.getElementById("messages");
+    const log = document.getElementById('log');
+    const form = document.getElementById('chatForm');
+    const input = document.getElementById('msg');
+    const send = document.getElementById('send');
 
-      const userMsg = document.createElement("div");
-      userMsg.className = "msg user";
-      userMsg.textContent = "Tú: " + input.value;
-      msgContainer.appendChild(userMsg);
+    const push = (text, who='ai', isError=false)=>{
+      const div=document.createElement('div');
+      div.className='msg '+(who==='you'?'you':'ai');
+      if(isError) div.classList.add('error');
+      div.textContent=text;
+      log.appendChild(div);
+      log.scrollTop=log.scrollHeight;
+    };
 
-      const res = await fetch("/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input.value })
-      });
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const text = input.value.trim();
+      if(!text) return;
+      push('Tú: '+text,'you');
+      input.value=''; send.disabled=true;
 
-      const data = await res.json();
+      try{
+        const r = await fetch('/chat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message: text })
+        });
+        const data = await r.json();
+        if(!r.ok) throw new Error(data?.detail || data?.error || 'Error');
+        push('IA: '+(data.reply || '(sin respuesta)'),'ai');
+      }catch(err){
+        push('⚠️ '+err.message,'ai',true);
+      }finally{
+        send.disabled=false; input.focus();
+      }
+    });
 
-      const botMsg = document.createElement("div");
-      botMsg.className = "msg bot";
-      botMsg.textContent = "IA: " + data.reply;
-      msgContainer.appendChild(botMsg);
-
-      input.value = "";
-    }
+    // saludo
+    push('IA: Listo. Estoy vivo en Render. ¿Qué hacemos primero?');
   </script>
 </body>
 </html>
