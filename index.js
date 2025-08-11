@@ -1,55 +1,81 @@
+// index.js — reemplaza TODO con esto
+import "dotenv/config.js";
 import express from "express";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
 import path from "path";
 import { fileURLToPath } from "url";
+import cors from "cors";
+import fetch from "node-fetch";
+import { liveBrowse } from "./tools/webTool.js"; // <-- usa el webTool que creaste
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
 
-// servir frontend
+app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// --- Chequeo de API Key (no hardcodeamos nada) ---
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+if (!OPENAI_API_KEY) {
+  console.error("❌ Falta OPENAI_API_KEY en Environment (Render).");
+  process.exit(1);
+}
+console.log(`🔐 OPENAI_API_KEY cargada: ${OPENAI_API_KEY.slice(0,10)}... (len=${OPENAI_API_KEY.length})`);
 
-app.post("/chat", async (req, res) => {
+// --- Healthchecks ---
+app.get("/healthz", (_, res) => res.status(200).send("ok"));
+app.get("/env-ok", (_, res) => res.json({ ok: !!OPENAI_API_KEY }));
+
+// --- Endpoint web simple para pruebas desde navegador ---
+app.get("/api/web", async (req, res) => {
+  const q = (req.query.q || "").toString().trim();
+  if (!q) return res.status(400).json({ error: "missing q" });
+  const data = await liveBrowse(q);
+  res.json({ data });
+});
+
+// --- Chat endpoint: soporta modo !web ---
+app.post("/api/chat", async (req, res) => {
   try {
-    const message = (req.body && req.body.message || "").toString().trim();
-    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "Falta OPENAI_API_KEY en variables de entorno" });
-    }
+    const userText = (req.body?.message || "").trim();
+
+    // Si el usuario manda "!web ..." primero navegamos y pasamos el contexto
+    let webContext = "";
+    const m = userText.match(/^!web\s+(.+)/i);
+    if (m) webContext = await liveBrowse(m[1]);
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: message }],
-        temperature: 0.7
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: "Eres una IA directa. Si hay 'Contexto web', úsalo para responder." },
+          webContext ? { role: "system", content: `Contexto web:\n${webContext}` } : null,
+          { role: "user", content: userText }
+        ].filter(Boolean)
       })
     });
 
-    const text = await r.text();
+    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      return res.status(r.status).json({ error: "OpenAI error", detail: text });
+      console.error("OpenAI error:", data);
+      return res.status(400).json({ error: data });
     }
-
-    const data = JSON.parse(text);
-    const reply = data?.choices?.[0]?.message?.content ?? "(sin respuesta del modelo)";
-    return res.json({ reply });
-  } catch (err) {
-    return res.status(500).json({ error: err.message || "Error interno" });
+    const reply = data?.choices?.[0]?.message?.content || "Sin respuesta.";
+    res.json({ reply });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 New-IA online en puerto ${PORT}`));
+// --- Server ---
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server ON en ${PORT}`);
+});
