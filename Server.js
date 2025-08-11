@@ -1,15 +1,22 @@
-const express = require('express');
-const path = require('path');
+// server.js
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Servir archivos estáticos desde la carpeta public
-app.use(express.static(path.join(__dirname, 'public')));
+// sirve frontend si lo tienes en /public o /dist
+app.use(express.static(path.join(__dirname, "public")));
+app.get("/healthz", (req, res) => res.status(200).send("ok")); // para health check
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// tu endpoint de chat (ejemplo)
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
+// ¡IMPORTANTE! usar el PORT de Render y 0.0.0.0
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server listo en puerto ${PORT}`);
 });
