@@ -1,69 +1,64 @@
-// server.js
+// Server.js
 import "dotenv/config.js";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
 import fetch from "node-fetch";
-import { liveBrowse } from "./tools/webTool.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+if (!OPENAI_API_KEY) {
+  console.error("❌ OPENAI_API_KEY MISSING. Set it in Render → Environment.");
+  process.exit(1);
+}
+// log de verificación (enmascarado, solo en logs de Render)
+console.log(
+  `🔐 OPENAI_API_KEY loaded: ${OPENAI_API_KEY.slice(0, 10)}... (len=${OPENAI_API_KEY.length})`
+);
+
 app.get("/healthz", (_, res) => res.status(200).send("ok"));
+app.get("/env-ok", (_, res) => res.json({ ok: !!OPENAI_API_KEY })); // no expone la key
 
-// 🔌 WEB LIVE (endpoint opcional para pruebas desde navegador)
-app.get("/api/web", async (req, res) => {
-  const q = req.query.q || "";
-  if (!q) return res.status(400).json({ error: "missing q" });
-  const data = await liveBrowse(q);
-  res.json({ data });
-});
-
-// ====== LLM CHAT ROUTE ======
+// Chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const userText = (req.body?.message || "").trim();
+    const userText = (req.body?.message || "").trim() || "Hola";
 
-    // 🔌 Si el usuario escribe "!web ..." hacemos browsing antes del LLM
-    let webContext = "";
-    const webMatch = userText.match(/^!web\s+(.+)/i);
-    if (webMatch) {
-      const q = webMatch[1];
-      webContext = await liveBrowse(q);
-    }
-
-    // ---- LLM (OpenAI Responses API estilo JSON) ----
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Eres una IA con acceso web cuando el usuario usa !web. Sé directo, cita las fuentes por dominio si el usuario las pide." },
-          webContext
-            ? { role: "system", content: `Contexto web fresco:\n${webContext}` }
-            : null,
+          { role: "system", content: "Responde directo, en español, breve y claro." },
           { role: "user", content: userText }
-        ].filter(Boolean),
+        ],
         temperature: 0.3
       })
     });
 
     const data = await r.json();
+    if (!r.ok) {
+      console.error("OpenAI error:", data);
+      return res.status(400).json({ error: data });
+    }
     const reply = data?.choices?.[0]?.message?.content || "Sin respuesta.";
     res.json({ reply });
   } catch (e) {
+    console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// ====== START ======
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, "0.0.0.0", () => console.log(`✅ Server on ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`✅ Server ON at ${PORT}`));
